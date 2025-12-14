@@ -20,7 +20,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Basic endpoints only
+# Include routers
+from routers import events
+app.include_router(events.router, prefix="/api")
+
 @app.get("/")
 def root():
     return {
