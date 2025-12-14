@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.database import get_db
 from app.models import Event, Match, EventPlayerStat, EventTeamStat
+from collections import defaultdict
 
 router = APIRouter(tags=["events"])
 
@@ -52,18 +53,18 @@ def get_event(slug: str, db: Session = Depends(get_db)):
 @router.get("/events/{slug}/overlay")
 def get_event_overlay(slug: str, db: Session = Depends(get_db)):
     """Get complete event data: event + matches + top players + top teams"""
-    
+
     # Get event
     stmt = select(Event).where(Event.slug == slug)
     event = db.execute(stmt).scalar_one_or_none()
-    
+
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    
+
     # Get matches
     matches_stmt = select(Match).where(Match.event_id == event.id).order_by(Match.date.desc())
     matches = db.execute(matches_stmt).scalars().all()
-    
+
     # Get player stats (top 10)
     players_stmt = (
         select(EventPlayerStat)
@@ -72,7 +73,7 @@ def get_event_overlay(slug: str, db: Session = Depends(get_db)):
         .limit(10)
     )
     player_stats = db.execute(players_stmt).scalars().all()
-    
+
     # Get team stats (top 10)
     teams_stmt = (
         select(EventTeamStat)
@@ -81,7 +82,7 @@ def get_event_overlay(slug: str, db: Session = Depends(get_db)):
         .limit(10)
     )
     team_stats = db.execute(teams_stmt).scalars().all()
-    
+
     return {
         "event": {
             "id": event.id,
@@ -131,4 +132,95 @@ def get_event_overlay(slug: str, db: Session = Depends(get_db)):
             }
             for team in team_stats
         ]
+    }
+
+@router.post("/events/{slug}/calculate-stats")
+def calculate_event_stats(slug: str, db: Session = Depends(get_db)):
+    """Calculate team statistics from match results"""
+
+    # Get event
+    stmt = select(Event).where(Event.slug == slug)
+    event = db.execute(stmt).scalar_one_or_none()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Get all finished matches
+    matches_stmt = select(Match).where(
+        Match.event_id == event.id,
+        Match.status == 'finished',
+        Match.team1_score.isnot(None),
+        Match.team2_score.isnot(None)
+    )
+    matches = db.execute(matches_stmt).scalars().all()
+
+    # Aggregate stats by team
+    team_stats = defaultdict(lambda: {
+        'wins': 0,
+        'losses': 0,
+        'maps_played': 0,
+        'logo': None
+    })
+
+    for match in matches:
+        team1 = match.team1_name
+        team2 = match.team2_name
+
+        if not team1 or not team2:
+            continue
+
+        # Update maps played
+        team_stats[team1]['maps_played'] += 1
+        team_stats[team2]['maps_played'] += 1
+
+        # Update logos
+        if match.team1_logo:
+            team_stats[team1]['logo'] = match.team1_logo
+        if match.team2_logo:
+            team_stats[team2]['logo'] = match.team2_logo
+
+        # Determine winner
+        if match.team1_score > match.team2_score:
+            team_stats[team1]['wins'] += 1
+            team_stats[team2]['losses'] += 1
+        elif match.team2_score > match.team1_score:
+            team_stats[team2]['wins'] += 1
+            team_stats[team1]['losses'] += 1
+
+    # Save to database
+    for team_name, stats in team_stats.items():
+        total_games = stats['wins'] + stats['losses']
+        win_rate = (stats['wins'] / total_games * 100) if total_games > 0 else 0
+
+        # Check if exists
+        existing = db.query(EventTeamStat).filter(
+            EventTeamStat.event_id == event.id,
+            EventTeamStat.team_name == team_name
+        ).first()
+
+        if existing:
+            existing.wins = stats['wins']
+            existing.losses = stats['losses']
+            existing.win_rate = round(win_rate, 2)
+            existing.maps_played = stats['maps_played']
+            existing.team_logo = stats['logo']
+        else:
+            team_stat = EventTeamStat(
+                event_id=event.id,
+                team_name=team_name,
+                team_logo=stats['logo'],
+                wins=stats['wins'],
+                losses=stats['losses'],
+                win_rate=round(win_rate, 2),
+                maps_played=stats['maps_played']
+            )
+            db.add(team_stat)
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Calculated stats for {len(team_stats)} teams",
+        "teams": len(team_stats),
+        "matches": len(matches)
     }
