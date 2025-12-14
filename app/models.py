@@ -5,7 +5,7 @@ from .database import Base
 
 class Event(Base):
     __tablename__ = "events"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(String, unique=True, nullable=False, index=True)
     slug = Column(String, unique=True, nullable=False, index=True)
@@ -15,6 +15,7 @@ class Event(Base):
     type = Column(String)
     prize_pool = Column(String)
     location = Column(String)
+    status = Column(String, default='upcoming')  # upcoming, ongoing, finished
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
