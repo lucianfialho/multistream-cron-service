@@ -392,10 +392,11 @@ def upgrade_event_logos(slug: str, db: Session = Depends(get_db)):
     updated_matches = 0
     for match in matches:
         updated = False
-        if match.team1_logo and 'w=50' in match.team1_logo:
+        # Check if needs upgrade (has w=50 OR has invalid signature with w=200)
+        if match.team1_logo and ('w=50' in match.team1_logo or ('w=200' in match.team1_logo and '&s=' in match.team1_logo)):
             match.team1_logo = upgrade_logo_url(match.team1_logo)
             updated = True
-        if match.team2_logo and 'w=50' in match.team2_logo:
+        if match.team2_logo and ('w=50' in match.team2_logo or ('w=200' in match.team2_logo and '&s=' in match.team2_logo)):
             match.team2_logo = upgrade_logo_url(match.team2_logo)
             updated = True
         if updated:
@@ -408,7 +409,7 @@ def upgrade_event_logos(slug: str, db: Session = Depends(get_db)):
 
     updated_teams = 0
     for team in teams:
-        if team.team_logo and 'w=50' in team.team_logo:
+        if team.team_logo and ('w=50' in team.team_logo or ('w=200' in team.team_logo and '&s=' in team.team_logo)):
             team.team_logo = upgrade_logo_url(team.team_logo)
             updated_teams += 1
 
