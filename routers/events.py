@@ -6,8 +6,16 @@ from app.models import Event, Match, EventPlayerStat, EventTeamStat
 from collections import defaultdict
 from datetime import datetime
 from pydantic import BaseModel
+import re
 
 router = APIRouter(tags=["events"])
+
+
+def upgrade_logo_url(url: str) -> str:
+    """Upgrade logo URL from w=50 to w=200 for better quality"""
+    if not url:
+        return url
+    return url.replace('w=50', 'w=200')
 
 
 class UpdateEventStatusRequest(BaseModel):
@@ -352,4 +360,52 @@ def update_event_details(slug: str, request: UpdateEventDetailsRequest, db: Sess
             "start_date": event.start_date.isoformat() if event.start_date else None,
             "end_date": event.end_date.isoformat() if event.end_date else None,
         }
+    }
+
+
+@router.post("/events/{slug}/upgrade-logos")
+def upgrade_event_logos(slug: str, db: Session = Depends(get_db)):
+    """Upgrade all team logos from w=50 to w=200 for better quality"""
+
+    # Get event
+    stmt = select(Event).where(Event.slug == slug)
+    event = db.execute(stmt).scalar_one_or_none()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Update match logos
+    matches_stmt = select(Match).where(Match.event_id == event.id)
+    matches = db.execute(matches_stmt).scalars().all()
+
+    updated_matches = 0
+    for match in matches:
+        updated = False
+        if match.team1_logo and 'w=50' in match.team1_logo:
+            match.team1_logo = upgrade_logo_url(match.team1_logo)
+            updated = True
+        if match.team2_logo and 'w=50' in match.team2_logo:
+            match.team2_logo = upgrade_logo_url(match.team2_logo)
+            updated = True
+        if updated:
+            match.updated_at = datetime.utcnow()
+            updated_matches += 1
+
+    # Update team stats logos
+    teams_stmt = select(EventTeamStat).where(EventTeamStat.event_id == event.id)
+    teams = db.execute(teams_stmt).scalars().all()
+
+    updated_teams = 0
+    for team in teams:
+        if team.team_logo and 'w=50' in team.team_logo:
+            team.team_logo = upgrade_logo_url(team.team_logo)
+            updated_teams += 1
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Upgraded logos from w=50 to w=200",
+        "updated_matches": updated_matches,
+        "updated_teams": updated_teams
     }
