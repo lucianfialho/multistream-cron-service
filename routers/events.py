@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.database import get_db
-from app.models import Event, Match, EventPlayerStat, EventTeamStat
+from app.models import Event, Match, EventPlayerStat, EventTeamStat, EventHighlight
 from collections import defaultdict
 from datetime import datetime
 from pydantic import BaseModel
@@ -139,6 +139,15 @@ def get_event_overlay(
     )
     team_stats = db.execute(teams_stmt).scalars().all()
 
+    # Get highlights (top 12 by views)
+    highlights_stmt = (
+        select(EventHighlight)
+        .where(EventHighlight.event_id == event.id)
+        .order_by(EventHighlight.view_count.desc().nullslast())
+        .limit(12)
+    )
+    highlights = db.execute(highlights_stmt).scalars().all()
+
     return {
         "event": {
             "id": event.id,
@@ -188,6 +197,19 @@ def get_event_overlay(
                 "maps_played": team.maps_played
             }
             for team in team_stats
+        ],
+        "highlights": [
+            {
+                "title": h.title,
+                "url": h.url,
+                "embed_url": h.embed_url,
+                "thumbnail": h.thumbnail,
+                "video_id": h.video_id,
+                "duration": h.duration,
+                "platform": h.platform,
+                "view_count": h.view_count
+            }
+            for h in highlights
         ]
     }
 
@@ -422,4 +444,48 @@ def upgrade_event_logos(slug: str, db: Session = Depends(get_db)):
         "message": f"Upgraded logos from w=50 to w=200",
         "updated_matches": updated_matches,
         "updated_teams": updated_teams
+    }
+
+@router.get("/events/{slug}/highlights")
+def get_event_highlights(slug: str, limit: int = 20, db: Session = Depends(get_db)):
+    """Get highlights for an event"""
+    # Find event
+    event_stmt = select(Event).where(Event.slug == slug)
+    event = db.execute(event_stmt).scalar_one_or_none()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Get highlights
+    highlights_stmt = (
+        select(EventHighlight)
+        .where(EventHighlight.event_id == event.id)
+        .order_by(EventHighlight.view_count.desc().nullslast())
+        .limit(limit)
+    )
+    highlights = db.execute(highlights_stmt).scalars().all()
+
+    return {
+        "event": {
+            "name": event.name,
+            "slug": event.slug,
+            "external_id": event.external_id
+        },
+        "total": len(highlights),
+        "highlights": [
+            {
+                "id": h.id,
+                "title": h.title,
+                "url": h.url,
+                "embed_url": h.embed_url,
+                "thumbnail": h.thumbnail,
+                "video_id": h.video_id,
+                "duration": h.duration,
+                "platform": h.platform,
+                "view_count": h.view_count,
+                "highlight_id": h.highlight_id,
+                "created_at": h.created_at.isoformat() if h.created_at else None
+            }
+            for h in highlights
+        ]
     }

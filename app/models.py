@@ -22,6 +22,7 @@ class Event(Base):
     matches = relationship("Match", back_populates="event")
     player_stats = relationship("EventPlayerStat", back_populates="event")
     team_stats = relationship("EventTeamStat", back_populates="event")
+    highlights = relationship("EventHighlight", back_populates="event")
 
 class Match(Base):
     __tablename__ = "matches"
@@ -62,7 +63,7 @@ class EventPlayerStat(Base):
 
 class EventTeamStat(Base):
     __tablename__ = "event_team_stats"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False, index=True)
     team_name = Column(String, nullable=False)
@@ -72,5 +73,28 @@ class EventTeamStat(Base):
     win_rate = Column(Numeric(5, 2))
     maps_played = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     event = relationship("Event", back_populates="team_stats")
+
+class EventHighlight(Base):
+    __tablename__ = "event_highlights"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False, index=True)
+
+    # Video info
+    title = Column(String, nullable=True)
+    url = Column(String, nullable=False)
+    embed_url = Column(String, nullable=True)
+    thumbnail = Column(String, nullable=True)
+    video_id = Column(String, nullable=True)  # Twitch clip ID or YouTube video ID
+    duration = Column(String, nullable=True)
+    platform = Column(String, default='twitch')  # twitch, youtube, other
+
+    # Metadata
+    view_count = Column(Integer, nullable=True)
+    highlight_id = Column(String, nullable=True)  # HLTV highlight ID
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    event = relationship("Event", back_populates="highlights")

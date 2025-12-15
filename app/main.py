@@ -85,6 +85,23 @@ def scheduler_status():
         "jobs": jobs_info
     }
 
+@app.post("/trigger/sync-highlights")
+def trigger_sync_highlights(eventId: str = "8042", eventSlug: str = "starladder-budapest-major-2025"):
+    """Manually trigger event highlights sync"""
+    from jobs.sync_highlights import sync_event_highlights
+    try:
+        sync_event_highlights(eventId, eventSlug)
+        return {
+            "status": "success",
+            "message": f"Synced highlights for event {eventId}"
+        }
+    except Exception as e:
+        logger.error(f"Error syncing highlights: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(
