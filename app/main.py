@@ -3,13 +3,42 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 import uvicorn
 import os
+import logging
+from contextlib import asynccontextmanager
 
 settings = get_settings()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan management - startup and shutdown"""
+    # Startup
+    logger.info("🚀 Starting FastAPI application...")
+
+    # Start APScheduler
+    from jobs.scheduler import start_scheduler
+    start_scheduler()
+
+    yield
+
+    # Shutdown
+    logger.info("🛑 Shutting down FastAPI application...")
+    from jobs.scheduler import shutdown_scheduler
+    shutdown_scheduler()
+
 
 app = FastAPI(
     title=settings.api_title,
     version=settings.api_version,
-    description="HLTV Stats API for CS2 Events"
+    description="HLTV Stats API for CS2 Events",
+    lifespan=lifespan
 )
 
 app.add_middleware(
