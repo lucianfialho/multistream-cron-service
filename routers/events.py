@@ -12,10 +12,21 @@ router = APIRouter(tags=["events"])
 
 
 def upgrade_logo_url(url: str) -> str:
-    """Upgrade logo URL from w=50 to w=200 for better quality"""
+    """
+    Upgrade logo URL from w=50 to w=200 for better quality
+
+    Removes s= parameter since it's a hash tied to w=50
+    """
     if not url:
         return url
-    return url.replace('w=50', 'w=200')
+
+    upgraded = url.replace('w=50', 'w=200')
+
+    # Remove signature hash parameter - it's invalid when w changes
+    if '&s=' in upgraded:
+        upgraded = upgraded.split('&s=')[0]
+
+    return upgraded
 
 
 class UpdateEventStatusRequest(BaseModel):

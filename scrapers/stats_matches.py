@@ -13,15 +13,25 @@ def upgrade_logo_quality(logo_url: str) -> str:
     """
     Upgrade logo URL from low quality (w=50) to high quality (w=200)
 
+    Important: Removes the 's=' parameter (hash) since it's tied to w=50.
+    HLTV will generate a new hash automatically for w=200.
+
     Examples:
-    - w=50 -> w=200 (better quality, colored)
-    - Keeps other parameters intact
+    Before: ...w=50&s=abc123
+    After:  ...w=200
     """
     if not logo_url:
         return logo_url
 
-    # Replace w=50 with w=200 for higher quality logos
-    return logo_url.replace('w=50', 'w=200')
+    # Replace w=50 with w=200
+    upgraded = logo_url.replace('w=50', 'w=200')
+
+    # Remove the s= parameter (signature hash) since it's invalid for w=200
+    # The hash is tied to specific parameters, changing w invalidates it
+    if '&s=' in upgraded:
+        upgraded = upgraded.split('&s=')[0]
+
+    return upgraded
 
 
 class StatsMatchesScraper(BaseScraper):
