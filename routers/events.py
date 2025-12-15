@@ -4,8 +4,14 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models import Event, Match, EventPlayerStat, EventTeamStat
 from collections import defaultdict
+from datetime import datetime
+from pydantic import BaseModel
 
 router = APIRouter(tags=["events"])
+
+
+class UpdateEventStatusRequest(BaseModel):
+    status: str  # upcoming, ongoing, finished
 
 @router.get("/events")
 def list_events(db: Session = Depends(get_db)):
@@ -89,6 +95,7 @@ def get_event_overlay(slug: str, db: Session = Depends(get_db)):
             "external_id": event.external_id,
             "slug": event.slug,
             "name": event.name,
+            "status": event.status,
             "start_date": event.start_date.isoformat() if event.start_date else None,
             "end_date": event.end_date.isoformat() if event.end_date else None,
             "type": event.type,
@@ -223,4 +230,41 @@ def calculate_event_stats(slug: str, db: Session = Depends(get_db)):
         "message": f"Calculated stats for {len(team_stats)} teams",
         "teams": len(team_stats),
         "matches": len(matches)
+    }
+
+
+@router.post("/events/{slug}/update-status")
+def update_event_status(slug: str, request: UpdateEventStatusRequest, db: Session = Depends(get_db)):
+    """Update event status (upcoming, ongoing, finished)"""
+
+    # Get event
+    stmt = select(Event).where(Event.slug == slug)
+    event = db.execute(stmt).scalar_one_or_none()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Validate status
+    valid_statuses = ['upcoming', 'ongoing', 'finished']
+    if request.status not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+        )
+
+    old_status = event.status
+    event.status = request.status
+    event.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Event status updated from '{old_status}' to '{request.status}'",
+        "event": {
+            "id": event.id,
+            "slug": event.slug,
+            "name": event.name,
+            "status": event.status
+        }
     }
