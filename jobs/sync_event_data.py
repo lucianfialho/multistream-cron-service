@@ -2,7 +2,7 @@
 Event data synchronization jobs
 """
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -13,8 +13,71 @@ from scrapers.stats_events import StatsEventsScraper
 from scrapers.stats_matches import StatsMatchesScraper
 
 
+def update_event_statuses():
+    """
+    Automatically update event statuses based on dates:
+    - If end_date passed -> 'finished'
+    - If between start_date and end_date -> 'ongoing'
+    - If before start_date -> 'upcoming'
+    """
+    db = SessionLocal()
+
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Get all events with dates
+        stmt = select(Event).where(Event.end_date.isnot(None))
+        events = db.execute(stmt).scalars().all()
+
+        print(f"🔄 Checking status for {len(events)} events", file=sys.stderr)
+
+        updated_count = 0
+
+        for event in events:
+            old_status = event.status
+            new_status = old_status
+
+            # Make dates timezone-aware for comparison
+            end_date = event.end_date.replace(tzinfo=timezone.utc) if event.end_date else None
+            start_date = event.start_date.replace(tzinfo=timezone.utc) if event.start_date else None
+
+            # Determine new status based on dates
+            if end_date and now > end_date:
+                new_status = 'finished'
+            elif start_date and end_date and start_date <= now <= end_date:
+                new_status = 'ongoing'
+            elif start_date and now < start_date:
+                new_status = 'upcoming'
+
+            # Update if status changed
+            if new_status != old_status:
+                event.status = new_status
+                event.updated_at = datetime.utcnow()
+                updated_count += 1
+                print(f"  📝 {event.name}: {old_status} → {new_status}", file=sys.stderr)
+
+        db.commit()
+
+        if updated_count > 0:
+            print(f"✅ Updated {updated_count} event statuses", file=sys.stderr)
+        else:
+            print(f"✅ All event statuses are up to date", file=sys.stderr)
+
+    except Exception as e:
+        db.rollback()
+        print(f"❌ Error updating event statuses: {e}", file=sys.stderr)
+        raise
+    finally:
+        db.close()
+
+
 def sync_all_event_matches():
     """Sync matches for all active events (ongoing or upcoming)"""
+
+    # First, update event statuses based on dates
+    print(f"\n🔄 Updating event statuses...", file=sys.stderr)
+    update_event_statuses()
+
     db = SessionLocal()
 
     try:
@@ -22,7 +85,7 @@ def sync_all_event_matches():
         stmt = select(Event).where(Event.status.in_(['upcoming', 'ongoing']))
         events = db.execute(stmt).scalars().all()
 
-        print(f"📊 Found {len(events)} active events to sync", file=sys.stderr)
+        print(f"\n📊 Found {len(events)} active events to sync", file=sys.stderr)
 
         total_new = 0
         total_updated = 0
@@ -146,9 +209,15 @@ def sync_events():
 
         print(f"✅ Events sync completed: {new_events} new, {updated_events} updated", file=sys.stderr)
 
+        # Update statuses based on dates after syncing
+        print(f"\n🔄 Updating event statuses...", file=sys.stderr)
+        db.close()  # Close current session before calling update_event_statuses
+        update_event_statuses()
+
     except Exception as e:
         db.rollback()
         print(f"❌ Error syncing events: {e}", file=sys.stderr)
         raise
     finally:
-        db.close()
+        if not db.is_active:
+            db.close()
