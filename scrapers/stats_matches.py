@@ -9,6 +9,21 @@ import sys
 import re
 
 
+def upgrade_logo_quality(logo_url: str) -> str:
+    """
+    Upgrade logo URL from low quality (w=50) to high quality (w=200)
+
+    Examples:
+    - w=50 -> w=200 (better quality, colored)
+    - Keeps other parameters intact
+    """
+    if not logo_url:
+        return logo_url
+
+    # Replace w=50 with w=200 for higher quality logos
+    return logo_url.replace('w=50', 'w=200')
+
+
 class StatsMatchesScraper(BaseScraper):
     """Scrape matches from /results page"""
 
@@ -64,14 +79,14 @@ class StatsMatchesScraper(BaseScraper):
                 team1_name = team1_div.text.strip()
             team1_img = team_cells[0].find('img', class_='team-logo')
             if team1_img:
-                team1_logo = team1_img.get('src')
+                team1_logo = upgrade_logo_quality(team1_img.get('src'))
 
             team2_div = team_cells[1].find('div', class_='team')
             if team2_div:
                 team2_name = team2_div.text.strip()
             team2_img = team_cells[1].find('img', class_='team-logo')
             if team2_img:
-                team2_logo = team2_img.get('src')
+                team2_logo = upgrade_logo_quality(team2_img.get('src'))
 
         # Find score
         team1_score = None
