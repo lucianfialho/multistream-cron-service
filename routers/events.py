@@ -57,8 +57,21 @@ def get_event(slug: str, db: Session = Depends(get_db)):
     }
 
 @router.get("/events/{slug}/overlay")
-def get_event_overlay(slug: str, db: Session = Depends(get_db)):
-    """Get complete event data: event + matches + top players + top teams"""
+def get_event_overlay(
+    slug: str,
+    matches_limit: int = 100,
+    players_limit: int = 20,
+    teams_limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """
+    Get complete event data: event + matches + top players + top teams
+
+    Query params:
+    - matches_limit: Max number of matches to return (default: 100)
+    - players_limit: Max number of players to return (default: 20)
+    - teams_limit: Max number of teams to return (default: 20)
+    """
 
     # Get event
     stmt = select(Event).where(Event.slug == slug)
@@ -67,25 +80,33 @@ def get_event_overlay(slug: str, db: Session = Depends(get_db)):
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    # Get matches
-    matches_stmt = select(Match).where(Match.event_id == event.id).order_by(Match.date.desc())
+    # Get matches (limit configurable, max 500)
+    max_matches = min(matches_limit, 500)
+    matches_stmt = (
+        select(Match)
+        .where(Match.event_id == event.id)
+        .order_by(Match.date.desc())
+        .limit(max_matches)
+    )
     matches = db.execute(matches_stmt).scalars().all()
 
-    # Get player stats (top 10)
+    # Get player stats (limit configurable, max 100)
+    max_players = min(players_limit, 100)
     players_stmt = (
         select(EventPlayerStat)
         .where(EventPlayerStat.event_id == event.id)
         .order_by(EventPlayerStat.rating.desc())
-        .limit(10)
+        .limit(max_players)
     )
     player_stats = db.execute(players_stmt).scalars().all()
 
-    # Get team stats (top 10)
+    # Get team stats (limit configurable, max 50)
+    max_teams = min(teams_limit, 50)
     teams_stmt = (
         select(EventTeamStat)
         .where(EventTeamStat.event_id == event.id)
         .order_by(EventTeamStat.win_rate.desc())
-        .limit(10)
+        .limit(max_teams)
     )
     team_stats = db.execute(teams_stmt).scalars().all()
 
