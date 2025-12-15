@@ -15,18 +15,20 @@ def upgrade_logo_url(url: str) -> str:
     """
     Upgrade logo URL from w=50 to w=200 for better quality
 
-    Removes s= parameter since it's a hash tied to w=50
+    Removes s= parameter since it's a hash tied to specific w value
     """
     if not url:
         return url
 
-    upgraded = url.replace('w=50', 'w=200')
+    # First remove any existing signature hash
+    if '&s=' in url:
+        url = url.split('&s=')[0]
 
-    # Remove signature hash parameter - it's invalid when w changes
-    if '&s=' in upgraded:
-        upgraded = upgraded.split('&s=')[0]
+    # Then upgrade width if needed
+    if 'w=50' in url:
+        url = url.replace('w=50', 'w=200')
 
-    return upgraded
+    return url
 
 
 class UpdateEventStatusRequest(BaseModel):
