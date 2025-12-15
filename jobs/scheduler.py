@@ -36,6 +36,50 @@ def sync_events_job():
         logger.error(f"[CRON] Events sync failed: {e}", exc_info=True)
 
 
+def sync_highlights_job():
+    """Job to sync highlights for ongoing and recently finished events"""
+    from .sync_highlights import sync_event_highlights
+    from app.models import Event
+    from app.database import SessionLocal
+    from sqlalchemy import select, or_
+    from datetime import datetime, timedelta
+
+    logger.info(f"[CRON] Starting highlights sync job at {datetime.utcnow()}")
+
+    db = SessionLocal()
+    try:
+        # Get ongoing events and recently finished events (last 7 days)
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+
+        stmt = select(Event).where(
+            or_(
+                Event.status == 'ongoing',
+                Event.status == 'finished'
+            ),
+            Event.end_date >= seven_days_ago
+        )
+        events = db.execute(stmt).scalars().all()
+
+        logger.info(f"[CRON] Found {len(events)} events to sync highlights")
+
+        synced_count = 0
+        for event in events:
+            try:
+                logger.info(f"[CRON] Syncing highlights for: {event.name} (ID: {event.external_id})")
+                sync_event_highlights(event.external_id, event.slug)
+                synced_count += 1
+            except Exception as e:
+                logger.error(f"[CRON] Failed to sync highlights for {event.name}: {e}")
+                continue
+
+        logger.info(f"[CRON] Highlights sync completed: {synced_count}/{len(events)} events synced")
+
+    except Exception as e:
+        logger.error(f"[CRON] Highlights sync job failed: {e}", exc_info=True)
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """Start the APScheduler with all configured jobs"""
 
@@ -57,10 +101,20 @@ def start_scheduler():
         replace_existing=True
     )
 
+    # Job 3: Sync highlights daily at 04:00 UTC
+    scheduler.add_job(
+        sync_highlights_job,
+        trigger=CronTrigger(hour=4, minute=0),
+        id='sync_highlights',
+        name='Sync event highlights',
+        replace_existing=True
+    )
+
     scheduler.start()
     logger.info("✅ APScheduler started with jobs:")
     logger.info("  - sync_matches: Every 10 minutes")
     logger.info("  - sync_events: Daily at 00:00 UTC")
+    logger.info("  - sync_highlights: Daily at 04:00 UTC")
 
 
 def shutdown_scheduler():
