@@ -65,6 +65,26 @@ def root():
 def health():
     return {"status": "healthy"}
 
+@app.get("/scheduler/status")
+def scheduler_status():
+    """Check scheduler status and list configured jobs"""
+    from jobs.scheduler import scheduler
+
+    jobs_info = []
+    for job in scheduler.get_jobs():
+        jobs_info.append({
+            "id": job.id,
+            "name": job.name,
+            "next_run": str(job.next_run_time) if job.next_run_time else None,
+            "trigger": str(job.trigger)
+        })
+
+    return {
+        "running": scheduler.running,
+        "jobs_count": len(jobs_info),
+        "jobs": jobs_info
+    }
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(
