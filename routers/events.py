@@ -13,6 +13,14 @@ router = APIRouter(tags=["events"])
 class UpdateEventStatusRequest(BaseModel):
     status: str  # upcoming, ongoing, finished
 
+
+class UpdateEventDetailsRequest(BaseModel):
+    prize_pool: str | None = None
+    location: str | None = None
+    type: str | None = None
+    start_date: str | None = None  # ISO format
+    end_date: str | None = None  # ISO format
+
 @router.get("/events")
 def list_events(db: Session = Depends(get_db)):
     stmt = select(Event).order_by(Event.start_date.desc()).limit(50)
@@ -287,5 +295,61 @@ def update_event_status(slug: str, request: UpdateEventStatusRequest, db: Sessio
             "slug": event.slug,
             "name": event.name,
             "status": event.status
+        }
+    }
+
+
+@router.post("/events/{slug}/update-details")
+def update_event_details(slug: str, request: UpdateEventDetailsRequest, db: Session = Depends(get_db)):
+    """Update event details (prize pool, location, type, dates)"""
+
+    # Get event
+    stmt = select(Event).where(Event.slug == slug)
+    event = db.execute(stmt).scalar_one_or_none()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    # Update fields if provided
+    updated_fields = []
+
+    if request.prize_pool is not None:
+        event.prize_pool = request.prize_pool
+        updated_fields.append("prize_pool")
+
+    if request.location is not None:
+        event.location = request.location
+        updated_fields.append("location")
+
+    if request.type is not None:
+        event.type = request.type
+        updated_fields.append("type")
+
+    if request.start_date:
+        from dateutil import parser
+        event.start_date = parser.parse(request.start_date)
+        updated_fields.append("start_date")
+
+    if request.end_date:
+        from dateutil import parser
+        event.end_date = parser.parse(request.end_date)
+        updated_fields.append("end_date")
+
+    event.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Updated fields: {', '.join(updated_fields)}",
+        "event": {
+            "id": event.id,
+            "slug": event.slug,
+            "name": event.name,
+            "prize_pool": event.prize_pool,
+            "location": event.location,
+            "type": event.type,
+            "start_date": event.start_date.isoformat() if event.start_date else None,
+            "end_date": event.end_date.isoformat() if event.end_date else None,
         }
     }
