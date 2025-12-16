@@ -50,8 +50,9 @@ app.add_middleware(
 )
 
 # Include routers
-from routers import events
+from routers import events, proxy
 app.include_router(events.router, prefix="/api")
+app.include_router(proxy.router, prefix="/api")
 
 @app.get("/")
 def root():
