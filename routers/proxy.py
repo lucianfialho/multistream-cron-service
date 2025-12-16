@@ -31,16 +31,16 @@ async def proxy_team_logo(url: str):
             impersonate="chrome110",
             timeout=10
         )
-        
+
         if response.status_code != 200:
             raise HTTPException(
                 status_code=response.status_code,
                 detail=f"Failed to fetch image: {response.status_code}"
             )
-        
+
         # Get content type from response
         content_type = response.headers.get('content-type', 'image/png')
-        
+
         # Return image with proper headers
         return Response(
             content=response.content,
@@ -50,6 +50,6 @@ async def proxy_team_logo(url: str):
                 'Access-Control-Allow-Origin': '*',
             }
         )
-        
-    except requests.RequestException as e:
+
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching image: {str(e)}")
